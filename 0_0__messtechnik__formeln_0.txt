@@ -13,7 +13,7 @@ print
 #####
 # f o r m e l n
 -- Abstandsquadratgesetz
-== Röntgen==
+== Röntgen{phialpha}}==
 -- 1 Röntgen=1×3,19phi×(0,5rho×√π^2+3,19phi×π+3,19phi×0,5-π×3,19phi+π-0,5)+0,5rho+√π^2+3,19phi×3,19+0,5rho+(0,5rho+0,5rho-3,19phi)+1÷2×π
 #
 ;;;;;
