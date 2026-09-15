@@ -10,6 +10,7 @@
 .DEBB{33}.
 .
 /.  /;;;;;  
+# notes..  . .
 copper super coil theory..  . .
 /.
 https://share.gemini.google/JVjcqOtZKl4X
