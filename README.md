@@ -9,6 +9,9 @@
 .
 .DEBB{33}.
 .
-/.  /;;;;;  https://share.gemini.google/JVjcqOtZKl4X
+/.  /;;;;;  
+copper super coil theory..  . .
+/.
+https://share.gemini.google/JVjcqOtZKl4X
 #
 /
