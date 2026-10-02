@@ -1,3 +1,7 @@
+/.
+updated.last::000020010000260./.sulu
+;;;;;
+#
 ::
 # .Math__01__01_047__0
 0047..a. .__0_A..{m a t h e m a t i k}
@@ -29,6 +33,7 @@ gaming--textures..vector-graphics..compression....../.2D.3D.c.pile
 gaming map design with vector-graphics(inkscape;etc.)..  . .
 #
 graphics file size <0,5kb for any texture..  . .
+infinite-1 single/cloned textures; max. 0,5kb/.png, for one small area on the map
 #
 2D vector-graphics{.png}; live c.pile via python; compress and nandflash to 3D map design..  . .
 #
