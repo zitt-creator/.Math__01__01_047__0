@@ -1,5 +1,5 @@
 /.
-updated.last::000110010000260./.sulu
+updated.last::000010011000260./.sulu
 ;;;;;
 #
 ::
@@ -38,9 +38,15 @@ infinite-1 single/cloned textures; max. 0,5kb/.png, for one small area on the ma
 2D vector-graphics{.png}; live c.pile via python; compress and nandflash to 3D map design..  . .
 #
 https://share.gemini.google/jmy007FbPhca
-#
-#
 ##
 ##
+#####
+##
+##
+# n o t e
+https://gemini.google.com/share/c001908e9588?social_preview=false&skid=ac1972b4-6877-4ad9-88ae-ec212345c279
+##
+##
+#####
 #
 /
