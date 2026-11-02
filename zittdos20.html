@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>CHRONO VAULT: 3D EGO-SHOOTER (DOS ENGINE - PI=1 EDITION)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        body {
+            background-color: #020205;
+            color: #ffffff;
+            font-family: 'Press Start 2P', monospace;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .crt-overlay {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .crt-overlay::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.45) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            z-index: 20;
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+
+        .dos-bg-blue { background-color: #000088; }
+        .dos-text-yellow { color: #FFFF55; }
+        .dos-text-cyan { color: #55FFFF; }
+        .dos-text-green { color: #55FF55; }
+        .dos-btn {
+            background-color: #0000AA;
+            border: 3px outset #55FFFF;
+            color: #FFFFFF;
+            cursor: pointer;
+            transition: all 0.05s;
+        }
+        .dos-btn:hover { background-color: #0000D5; }
+        .dos-btn:active, .dos-btn.active {
+            border-style: inset;
+            background-color: #FFFF55;
+            color: #000000;
+        }
+
+        canvas {
+            image-rendering: pixelated;
+            background-color: #000000;
+            cursor: crosshair;
+        }
+
+        .touch-btn {
+            background: rgba(0, 0, 136, 0.65);
+            border: 2px solid #55FFFF;
+            color: #FFFF55;
+            font-family: 'Press Start 2P', monospace;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            touch-action: none;
+            box-shadow: inset 0 0 8px rgba(85, 255, 255, 0.3);
+        }
+        .touch-btn:active, .touch-btn.active {
+            background: rgba(255, 255, 85, 0.85);
+            color: #000000;
+            border-color: #FFFFFF;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container" class="crt-overlay flex flex-col w-full max-w-4xl bg-black rounded-lg border-4 border-cyan-700 shadow-2xl p-2 my-auto">
+        
+        <!-- DOS HEADER BAR -->
+        <div class="dos-bg-blue text-white px-3 py-2 flex justify-between items-center text-xs sm:text-sm border-b-2 border-cyan-400">
+            <div class="flex items-center gap-2">
+                <span class="dos-text-yellow">Z.ITT DOS v6.22</span>
+                <span class="hidden sm:inline dos-text-cyan">| CHRONO_3D_KERNEL.EXE (room == π ÷ 2 | π=1)</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <div>SCORE: <span id="ui-score" class="dos-text-green">00000</span></div>
+                <div>HEALTH: <span id="ui-health" class="dos-text-yellow">100%</span></div>
+            </div>
+        </div>
+
+        <!-- CANVAS GAMEPLAY WINDOW -->
+        <div class="relative w-full aspect-[4/3] bg-black flex justify-center items-center overflow-hidden border-2 border-cyan-900">
+            <canvas id="gameCanvas" width="640" height="480" class="w-full h-full"></canvas>
+
+            <!-- ON-SCREEN MOBILE TOUCH HUD OVERLAY -->
+            <div id="touch-controls" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 z-20">
+                <div class="flex justify-between items-center opacity-80">
+                    <button id="btn-reorient-touch" class="pointer-events-auto dos-btn px-2 py-1 text-[9px] bg-amber-800">🎯 RESET POS</button>
+                    <button id="btn-open-options" class="pointer-events-auto dos-btn px-2 py-1 text-[9px]">⚙️ OPTIONS</button>
+                </div>
+
+                <div class="flex justify-between items-end w-full gap-2 pointer-events-auto">
+                    <!-- Virtual D-Pad -->
+                    <div class="grid grid-cols-3 gap-1 w-32 h-32 sm:w-36 sm:h-36">
+                        <div></div>
+                        <button id="touch-fwd" class="touch-btn text-xs">▲</button>
+                        <div></div>
+                        <button id="touch-left" class="touch-btn text-xs">◄</button>
+                        <button id="touch-back" class="touch-btn text-xs">▼</button>
+                        <button id="touch-right" class="touch-btn text-xs">►</button>
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                    </div>
+
+                    <!-- Aim & Fire Touch Buttons -->
+                    <div class="flex flex-col gap-2 items-end">
+                        <div class="flex gap-2">
+                            <button id="touch-rot-left" class="touch-btn w-12 h-12 text-xs">↶</button>
+                            <button id="touch-rot-right" class="touch-btn w-12 h-12 text-xs">↷</button>
+                        </div>
+                        <button id="touch-fire" class="touch-btn w-24 h-16 sm:w-28 sm:h-18 text-xs bg-red-900/90 border-red-400 text-white font-bold">⚡ FIRE</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- OVERLAY MENU SCREENS -->
+            <div id="overlay-screen" class="absolute inset-0 bg-black/90 flex flex-col items-center justify-center p-6 text-center z-30">
+                <h1 id="overlay-title" class="text-xl sm:text-3xl text-yellow-400 mb-3 tracking-wider leading-relaxed">CHRONO VAULT 3D</h1>
+                <p id="overlay-msg" class="text-xs sm:text-sm text-cyan-300 mb-6 max-w-lg leading-relaxed">
+                    Survive inside the 3D vector tomb! State: <span class="text-yellow-300">room == π ÷ 2</span> | Constant: <span class="text-green-300">π = 1</span>. Neutralize incoming MBots or recalibrate position at any time!
+                </p>
+                <div class="flex flex-wrap gap-4 justify-center">
+                    <button id="btn-start" class="dos-btn px-6 py-3 text-sm font-bold tracking-wider">ENTER VAULT</button>
+                    <button id="btn-menu-options" class="dos-btn px-4 py-3 text-xs">⚙️ OPTIONS</button>
+                </div>
+            </div>
+
+            <!-- OPTIONS DIALOG MODAL -->
+            <div id="options-modal" class="hidden absolute inset-0 bg-black/95 flex flex-col items-center justify-center p-6 text-center z-40">
+                <h2 class="text-lg sm:text-2xl text-yellow-400 mb-4 border-b-2 border-cyan-400 pb-2 w-full max-w-md">SYSTEM OPTIONS</h2>
+                
+                <div class="flex flex-col gap-4 text-xs text-cyan-300 w-full max-w-md text-left mb-6">
+                    <div class="flex justify-between items-center bg-blue-950/60 p-2 rounded border border-blue-800">
+                        <span>C-PILE POST-PROCESSING:</span>
+                        <button id="opt-postprocess" class="dos-btn px-3 py-1 text-[10px]">ENABLED</button>
+                    </div>
+
+                    <div class="flex justify-between items-center bg-blue-950/60 p-2 rounded border border-blue-800">
+                        <span>MBOT AI SYSTEM:</span>
+                        <button id="opt-mbot-toggle" class="dos-btn px-3 py-1 text-[10px] bg-green-800">ACTIVE</button>
+                    </div>
+
+                    <div class="flex justify-between items-center bg-blue-950/60 p-2 rounded border border-blue-800">
+                        <span>RELOCATE AVATAR:</span>
+                        <button id="opt-reorient" class="dos-btn px-3 py-1 text-[10px] bg-amber-800">RESET ORIGIN</button>
+                    </div>
+
+                    <div class="flex justify-between items-center bg-blue-950/60 p-2 rounded border border-blue-800">
+                        <span>PI CONSTANT MODE:</span>
+                        <button id="opt-pi-toggle" class="dos-btn px-3 py-1 text-[10px] bg-cyan-800">π = 1</button>
+                    </div>
+                </div>
+
+                <button id="btn-close-options" class="dos-btn px-6 py-2 text-xs font-bold">CLOSE</button>
+            </div>
+        </div>
+
+        <!-- DOS STATUS BAR -->
+        <div class="dos-bg-blue p-2 mt-1 flex flex-col gap-2 border-t-2 border-cyan-400">
+            <div class="flex justify-between items-center text-[10px] sm:text-xs px-2 py-1 bg-black/50 rounded border border-blue-900">
+                <div>MBOTS: <span id="ui-targets" class="dos-text-cyan">0 / 0</span></div>
+                <div>WAVE: <span id="ui-wave" class="dos-text-yellow">1</span></div>
+                <div>PHYSICS: <span class="dos-text-green">room == π ÷ 2</span></div>
+                <div>PI: <span id="ui-pi-val" class="dos-text-yellow">1</span></div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-1 text-[10px] sm:text-xs text-cyan-300 px-1">
+                <span>🎮 WASD / Touch D-Pad | Aim: Drag / Keys | Fire: Touch / Click</span>
+                <div class="flex gap-2">
+                    <button id="btn-reorient" class="dos-btn px-2 py-1 text-[10px] bg-amber-800">🎯 RESET POS</button>
+                    <button id="btn-restart" class="dos-btn px-3 py-1 text-[10px] bg-red-900">🔄 RESTART</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            play(type) {
+                if (!this.enabled || !this.ctx) return;
+                try {
+                    const t = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    if (type === 'fire') {
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(600, t);
+                        osc.frequency.exponentialRampToValueAtTime(80, t + 0.12);
+                        gain.gain.setValueAtTime(0.25, t);
+                        gain.gain.linearRampToValueAtTime(0.01, t + 0.12);
+                        osc.start(t);
+                        osc.stop(t + 0.12);
+                    } else if (type === 'reorient') {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(300, t);
+                        osc.frequency.linearRampToValueAtTime(600, t + 0.15);
+                        gain.gain.setValueAtTime(0.2, t);
+                        gain.gain.linearRampToValueAtTime(0.01, t + 0.15);
+                        osc.start(t);
+                        osc.stop(t + 0.15);
+                    }
+                } catch(e) {}
+            }
+        }
+
+        const audio = new SoundFX();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const W = 640;
+        const H = 480;
+
+        const offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = W;
+        offscreenCanvas.height = H;
+        const offCtx = offscreenCanvas.getContext('2d');
+
+        let gameState = 'START';
+        let postProcessEnabled = true;
+        let mbotEnabled = true;
+        let piValue = 1.0;
+        let score = 0;
+        let playerHealth = 100;
+        let wave = 1;
+        let totalWaveBots = 3;
+
+        let player = { x: 0, y: 0, z: 0, angle: 0 };
+        let weaponBob = 0;
+        let playerProjectiles = [];
+        let enemyProjectiles = [];
+        let pillars = [];
+        let mbots = [];
+        let particles = [];
+
+        function resetPlayerPosition() {
+            player.x = 0;
+            player.y = 0;
+            player.z = 0;
+            player.angle = 0;
+            audio.play('reorient');
+        }
+
+        function initWave(w) {
+            wave = w;
+            playerHealth = 100;
+            resetPlayerPosition();
+            playerProjectiles = [];
+            enemyProjectiles = [];
+            particles = [];
+            pillars = [];
+            mbots = [];
+
+            totalWaveBots = mbotEnabled ? (2 + wave * 2) : 0;
+            const baseCircle = (piValue === 1.0) ? (1.0 * 2) : (Math.PI * 2);
+
+            for (let i = 0; i < 6; i++) {
+                const ang = (i / 6) * baseCircle;
+                pillars.push({
+                    x: Math.cos(ang) * 11,
+                    z: Math.sin(ang) * 11,
+                    radius: 0.7,
+                    height: 4.5,
+                    color: i % 2 === 0 ? '#55ffff' : '#ff55ff'
+                });
+            }
+
+            if (mbotEnabled) {
+                for (let i = 0; i < totalWaveBots; i++) {
+                    const ang = (i / totalWaveBots) * baseCircle + (baseCircle / 8);
+                    const dist = 8 + Math.random() * 5;
+                    mbots.push({
+                        x: Math.cos(ang) * dist,
+                        z: Math.sin(ang) * dist,
+                        hp: 3,
+                        maxHp: 3,
+                        speed: 1.5 + Math.random() * 0.8,
+                        shootTimer: Math.random() * 2,
+                        color: '#ff5555'
+                    });
+                }
+            }
+            updateUI();
+        }
+
+        let lastTime = performance.now();
+        function gameLoop(now) {
+            const dt = Math.min((now - lastTime) / 1000, 0.1);
+            lastTime = now;
+
+            if (gameState === 'PLAYING') {
+                updatePlayer(dt);
+                if (mbotEnabled) updateMBots(dt);
+                updateProjectiles(dt);
+                updateParticles(dt);
+            }
+
+            renderOffscreen();
+            if (postProcessEnabled) {
+                renderLosslessPostProcess();
+            } else {
+                ctx.clearRect(0, 0, W, H);
+                ctx.drawImage(offscreenCanvas, 0, 0, W, H);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function updatePlayer(dt) {
+            const speed = 4.8;
+            const rotSpeed = 2.4;
+            let moving = false;
+
+            if (keys['KeyW']) { player.x += Math.sin(player.angle) * speed * dt; player.z += Math.cos(player.angle) * speed * dt; moving = true; }
+            if (keys['KeyS']) { player.x -= Math.sin(player.angle) * speed * dt; player.z -= Math.cos(player.angle) * speed * dt; moving = true; }
+            if (keys['KeyA']) { player.x -= Math.cos(player.angle) * speed * dt; player.z += Math.sin(player.angle) * speed * dt; moving = true; }
+            if (keys['KeyD']) { player.x += Math.cos(player.angle) * speed * dt; player.z -= Math.sin(player.angle) * speed * dt; moving = true; }
+
+            if (keys['ArrowLeft']) player.angle -= rotSpeed * dt;
+            if (keys['ArrowRight']) player.angle += rotSpeed * dt;
+
+            weaponBob = moving ? (weaponBob + dt * 10) : (Math.sin(performance.now() * 0.003) * 0.5);
+
+            const maxDist = 14;
+            if (Math.hypot(player.x, player.z) > maxDist) {
+                const a = Math.atan2(player.z, player.x);
+                player.x = Math.cos(a) * maxDist;
+                player.z = Math.sin(a) * maxDist;
+            }
+        }
+
+        function firePlayerProjectile() {
+            playerProjectiles.push({
+                x: player.x, y: 0, z: player.z,
+                vx: Math.sin(player.angle) * 20, vz: Math.cos(player.angle) * 20,
+                life: 1.5
+            });
+            audio.play('fire');
+        }
+
+        function updateMBots(dt) {
+            mbots.forEach(bot => {
+                if (bot.hp <= 0) return;
+                const dx = player.x - bot.x;
+                const dz = player.z - bot.z;
+                const dist = Math.hypot(dx, dz);
+
+                if (dist > 2.5) {
+                    bot.x += (dx / dist) * bot.speed * dt;
+                    bot.z += (dz / dist) * bot.speed * dt;
+                }
+            });
+        }
+
+        function updateProjectiles(dt) {
+            for (let i = playerProjectiles.length - 1; i >= 0; i--) {
+                const p = playerProjectiles[i];
+                p.x += p.vx * dt;
+                p.z += p.vz * dt;
+                p.life -= dt;
+
+                if (mbotEnabled) {
+                    for (let j = 0; j < mbots.length; j++) {
+                        const bot = mbots[j];
+                        if (bot.hp <= 0) continue;
+                        if (Math.hypot(p.x - bot.x, p.z - bot.z) < 0.8) {
+                            bot.hp--;
+                            p.life = 0;
+                            score += 200;
+                            if (bot.hp <= 0 && mbots.filter(b => b.hp > 0).length === 0) {
+                                wave++;
+                                initWave(wave);
+                            }
+                            updateUI();
+                            break;
+                        }
+                    }
+                }
+                if (p.life <= 0) playerProjectiles.splice(i, 1);
+            }
+        }
+
+        function updateParticles(dt) {
+            particles.forEach((pt, i) => {
+                pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.z += pt.vz * dt;
+                pt.life -= dt;
+                if (pt.life <= 0) particles.splice(i, 1);
+            });
+        }
+
+        function renderOffscreen() {
+            offCtx.fillStyle = '#020208';
+            offCtx.fillRect(0, 0, W, H);
+            const renderList = [];
+
+            const altarPos = { x: 0, z: 8 };
+            const rxAltar = (altarPos.x - player.x) * Math.cos(-player.angle) - (altarPos.z - player.z) * Math.sin(-player.angle);
+            const rzAltar = (altarPos.x - player.x) * Math.sin(-player.angle) + (altarPos.z - player.z) * Math.cos(-player.angle);
+            if (rzAltar > 0.5) renderList.push({ type: 'arch_portal', rx: rxAltar, rz: rzAltar });
+
+            mbots.forEach(bot => {
+                if (bot.hp <= 0) return;
+                const rx = (bot.x - player.x) * Math.cos(-player.angle) - (bot.z - player.z) * Math.sin(-player.angle);
+                const rz = (bot.x - player.x) * Math.sin(-player.angle) + (bot.z - player.z) * Math.cos(-player.angle);
+                if (rz > 0.5) renderList.push({ type: 'mbot', obj: bot, rx, rz });
+            });
+
+            playerProjectiles.forEach(p => {
+                const rx = (p.x - player.x) * Math.cos(-player.angle) - (p.z - player.z) * Math.sin(-player.angle);
+                const rz = (p.x - player.x) * Math.sin(-player.angle) + (p.z - player.z) * Math.cos(-player.angle);
+                if (rz > 0.5) renderList.push({ type: 'player_proj', rx, rz });
+            });
+
+            renderList.sort((a, b) => b.rz - a.rz);
+
+            renderList.forEach(item => {
+                const scale = 320 / item.rz;
+                const sx = W / 2 + item.rx * scale;
+                const sy = H / 2;
+
+                if (item.type === 'arch_portal') {
+                    offCtx.strokeStyle = '#55ffff';
+                    offCtx.lineWidth = 4;
+                    offCtx.beginPath();
+                    const maxArc = (piValue === 1.0) ? 1.0 : Math.PI;
+                    offCtx.arc(sx, sy, 2.25 * scale, maxArc, 0);
+                    offCtx.stroke();
+                    offCtx.fillStyle = '#ffff55';
+                    offCtx.font = '12px "Press Start 2P"';
+                    offCtx.fillText(`room == π ÷ 2 (π=${piValue})`, sx - 110, sy - scale);
+                } else if (item.type === 'mbot') {
+                    offCtx.fillStyle = item.obj.color;
+                    offCtx.fillRect(sx - 0.6 * scale, sy - 0.75 * scale, 1.2 * scale, 1.5 * scale);
+                } else if (item.type === 'player_proj') {
+                    offCtx.fillStyle = '#ffff55';
+                    offCtx.beginPath();
+                    offCtx.arc(sx, sy, 5, 0, (piValue === 1.0 ? 2.0 : Math.PI * 2));
+                    offCtx.fill();
+                }
+            });
+
+            offCtx.strokeStyle = '#55ffff';
+            offCtx.lineWidth = 2;
+            offCtx.beginPath();
+            offCtx.arc(W / 2, H / 2, 8, 0, Math.PI * 2);
+            offCtx.stroke();
+        }
+
+        function renderLosslessPostProcess() {
+            ctx.clearRect(0, 0, W, H);
+            ctx.drawImage(offscreenCanvas, 0, 0, W, H);
+            ctx.globalCompositeOperation = 'screen';
+            ctx.drawImage(offscreenCanvas, -1, 0, W, H);
+            ctx.drawImage(offscreenCanvas, 1, 0, W, H);
+            ctx.globalCompositeOperation = 'source-over';
+        }
+
+        const keys = {};
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        canvas.addEventListener('click', () => { if (gameState === 'PLAYING') firePlayerProjectile(); });
+
+        let isDragging = false, lastMouseX = 0;
+        canvas.addEventListener('mousedown', e => { isDragging = true; lastMouseX = e.clientX; });
+        window.addEventListener('mouseup', () => isDragging = false);
+        window.addEventListener('mousemove', e => {
+            if (isDragging && gameState === 'PLAYING') {
+                player.angle += (e.clientX - lastMouseX) * 0.005;
+                lastMouseX = e.clientX;
+            }
+        });
+
+        function setupTouchControls() {
+            const bindTouchBtn = (id, code) => {
+                const btn = document.getElementById(id);
+                if (!btn) return;
+                const start = e => { e.preventDefault(); audio.init(); keys[code] = true; btn.classList.add('active'); };
+                const end = e => { e.preventDefault(); keys[code] = false; btn.classList.remove('active'); };
+                btn.addEventListener('touchstart', start, {passive: false});
+                btn.addEventListener('touchend', end, {passive: false});
+                btn.addEventListener('mousedown', start);
+                btn.addEventListener('mouseup', end);
+            };
+            bindTouchBtn('touch-fwd', 'KeyW');
+            bindTouchBtn('touch-back', 'KeyS');
+            bindTouchBtn('touch-left', 'KeyA');
+            bindTouchBtn('touch-right', 'KeyD');
+            bindTouchBtn('touch-rot-left', 'ArrowLeft');
+            bindTouchBtn('touch-rot-right', 'ArrowRight');
+
+            const fireBtn = document.getElementById('touch-fire');
+            if (fireBtn) {
+                fireBtn.addEventListener('touchstart', e => { e.preventDefault(); audio.init(); if (gameState === 'PLAYING') firePlayerProjectile(); }, {passive: false});
+                fireBtn.addEventListener('mousedown', e => { e.preventDefault(); audio.init(); if (gameState === 'PLAYING') firePlayerProjectile(); });
+            }
+        }
+
+        document.getElementById('btn-reorient').addEventListener('click', resetPlayerPosition);
+        document.getElementById('btn-reorient-touch').addEventListener('click', resetPlayerPosition);
+        document.getElementById('opt-reorient').addEventListener('click', () => { resetPlayerPosition(); document.getElementById('options-modal').classList.add('hidden'); });
+
+        document.getElementById('btn-open-options').addEventListener('click', () => document.getElementById('options-modal').classList.remove('hidden'));
+        document.getElementById('btn-menu-options').addEventListener('click', () => document.getElementById('options-modal').classList.remove('hidden'));
+        document.getElementById('btn-close-options').addEventListener('click', () => document.getElementById('options-modal').classList.add('hidden'));
+
+        document.getElementById('opt-postprocess').addEventListener('click', () => {
+            postProcessEnabled = !postProcessEnabled;
+            document.getElementById('opt-postprocess').innerText = postProcessEnabled ? 'ENABLED' : 'DISABLED';
+        });
+
+        document.getElementById('opt-mbot-toggle').addEventListener('click', () => {
+            mbotEnabled = !mbotEnabled;
+            const btn = document.getElementById('opt-mbot-toggle');
+            btn.innerText = mbotEnabled ? 'ACTIVE' : 'OFF';
+            btn.className = mbotEnabled ? 'dos-btn px-3 py-1 text-[10px] bg-green-800' : 'dos-btn px-3 py-1 text-[10px] bg-red-900';
+            initWave(wave);
+        });
+
+        document.getElementById('opt-pi-toggle').addEventListener('click', () => {
+            piValue = (piValue === 1.0) ? Math.PI : 1.0;
+            const btn = document.getElementById('opt-pi-toggle');
+            btn.innerText = (piValue === 1.0) ? 'π = 1' : 'π = 3.14159';
+            document.getElementById('ui-pi-val').innerText = (piValue === 1.0) ? '1' : '3.14';
+            initWave(wave);
+        });
+
+        document.getElementById('btn-start').addEventListener('click', () => {
+            audio.init();
+            initWave(1);
+            gameState = 'PLAYING';
+            document.getElementById('overlay-screen').classList.add('hidden');
+        });
+
+        document.getElementById('btn-restart').addEventListener('click', () => initWave(wave));
+
+        function updateUI() {
+            const alive = mbots.filter(b => b.hp > 0).length;
+            document.getElementById('ui-score').innerText = String(score).padStart(5, '0');
+            document.getElementById('ui-health').innerText = `${playerHealth}%`;
+            document.getElementById('ui-targets').innerText = `${alive} / ${totalWaveBots}`;
+            document.getElementById('ui-wave').innerText = wave;
+        }
+
+        window.onload = () => { setupTouchControls(); requestAnimationFrame(gameLoop); };
+    </script>
+</body>
+</html>
