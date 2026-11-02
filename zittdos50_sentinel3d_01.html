@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Z.ITT DOS 3D - Shadow Sentinel Engine v6.0</title>
+    <!-- Tailwind CSS for modern HUD & UI overlay -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #020408;
+            font-family: 'Share Tech Mono', monospace;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        /* CRT Curved Screen & Scanline Effect */
+        .crt-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 20;
+            background: radial-gradient(circle at center, transparent 65%, rgba(0, 0, 0, 0.85) 100%),
+                        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%);
+            background-size: 100% 100%, 100% 4px;
+            box-shadow: inset 0 0 120px rgba(0, 255, 204, 0.15);
+        }
+
+        .crt-flicker {
+            animation: flicker 0.12s infinite alternate;
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.97; }
+            100% { opacity: 1; }
+        }
+
+        .dos-font {
+            font-family: 'VT323', monospace;
+        }
+
+        /* Custom DOS Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #020b14;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #00ffcc;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center relative w-full h-full bg-slate-950 text-cyan-400 crt-flicker">
+
+    <!-- CRT Overlay Frame -->
+    <div class="crt-overlay"></div>
+
+    <!-- Main Engine Container -->
+    <div id="game-container" class="relative w-full h-full flex flex-col justify-between items-center overflow-hidden">
+        
+        <!-- Software Raycaster Viewport Canvas -->
+        <canvas id="viewport" class="w-full h-full object-cover block cursor-crosshair"></canvas>
+
+        <!-- Top Header Status Bar -->
+        <div class="absolute top-0 left-0 right-0 p-2 bg-slate-950/85 border-b border-cyan-500/40 text-xs sm:text-sm flex justify-between items-center z-10 backdrop-blur-md">
+            <div class="flex items-center space-x-3">
+                <span class="text-emerald-400 font-bold tracking-widest text-base dos-font">C:\ZITT\SHADOW_AVATAR.EXE</span>
+                <span class="hidden sm:inline-block bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-700/50">FPS: <span id="fps-counter">60</span></span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="text-yellow-400">SHADOWS PURIFIED: <span id="cards-collected">0</span>/7</span>
+                <button id="btn-pause" class="px-3 py-1 bg-cyan-900/60 hover:bg-cyan-700/80 text-cyan-200 border border-cyan-500/50 rounded transition duration-150 active:translate-y-0.5 text-xs font-bold">
+                    [ESC] CONFIG
+                </button>
+            </div>
+        </div>
+
+        <!-- Crosshair & Interaction Prompt -->
+        <div class="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
+            <div class="w-5 h-5 border-l-2 border-r-2 border-t-2 border-b-2 border-cyan-400/60 rounded-full flex items-center justify-center">
+                <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
+            </div>
+            <div id="interact-prompt" class="absolute mt-14 text-yellow-300 bg-slate-950/90 border border-yellow-500 px-3 py-1 text-xs rounded shadow-lg transition-opacity duration-200 opacity-0 dos-font tracking-wide">
+                PRESS [E] / TAP TO PURIFY SHADOW ORB
+            </div>
+        </div>
+
+        <!-- Touch Controls (Mobile Overlay) -->
+        <div id="touch-controls" class="absolute inset-0 pointer-events-none z-10 flex justify-between items-end p-4 sm:hidden">
+            <!-- Virtual Touch D-Pad / Joystick -->
+            <div id="touch-joystick-zone" class="w-28 h-28 bg-slate-900/40 border border-cyan-500/30 rounded-full pointer-events-auto relative flex items-center justify-center touch-none">
+                <div id="touch-joystick-stick" class="w-10 h-10 bg-cyan-500/50 border border-cyan-300 rounded-full absolute"></div>
+            </div>
+            
+            <!-- Virtual Action Buttons -->
+            <div class="flex flex-col space-y-2 pointer-events-auto">
+                <button id="btn-touch-action" class="w-14 h-14 bg-emerald-600/60 active:bg-emerald-500/80 border border-emerald-300 text-white font-bold rounded-full text-xs flex items-center justify-center shadow-lg active:scale-95">
+                    ACT
+                </button>
+                <div class="flex space-x-2">
+                    <button id="btn-touch-turn-left" class="w-12 h-12 bg-cyan-800/60 active:bg-cyan-600/80 border border-cyan-400 text-cyan-200 font-bold rounded-full text-xs flex items-center justify-center">
+                        ◄
+                    </button>
+                    <button id="btn-touch-turn-right" class="w-12 h-12 bg-cyan-800/60 active:bg-cyan-600/80 border border-cyan-400 text-cyan-200 font-bold rounded-full text-xs flex items-center justify-center">
+                        ►
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Animated Classic HUD Interface -->
+        <div class="absolute bottom-0 left-0 right-0 bg-slate-950/90 border-t-2 border-cyan-500/60 p-2 sm:p-3 grid grid-cols-4 sm:grid-cols-6 gap-2 items-center z-10 backdrop-blur-md">
+            
+            <!-- Animated Z.ITT Shadow Avatar Face -->
+            <div class="col-span-1 flex justify-center items-center">
+                <div class="relative w-14 h-14 sm:w-16 sm:h-16 bg-slate-900 border-2 border-emerald-400/80 rounded overflow-hidden shadow-[0_0_12px_rgba(0,255,200,0.25)]">
+                    <canvas id="avatar-canvas" class="w-full h-full block"></canvas>
+                    <div id="avatar-status-badge" class="absolute bottom-0 right-0 bg-emerald-500 text-slate-950 text-[9px] font-bold px-1 rounded-tl">Z.ITT</div>
+                </div>
+            </div>
+
+            <!-- Health Integrity Bar -->
+            <div class="col-span-1 sm:col-span-2 flex flex-col justify-center">
+                <div class="text-[10px] sm:text-xs text-cyan-300 font-bold tracking-wider mb-1 flex justify-between">
+                    <span>SHADOW INTEGRITY</span>
+                    <span id="health-value" class="text-emerald-400">100%</span>
+                </div>
+                <div class="w-full bg-slate-900 h-3 sm:h-4 border border-cyan-600/50 rounded-sm p-0.5">
+                    <div id="health-bar" class="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 w-full transition-all duration-300"></div>
+                </div>
+            </div>
+
+            <!-- Deck / Collectibles Grid -->
+            <div class="col-span-2 flex flex-col justify-center">
+                <div class="text-[10px] sm:text-xs text-yellow-300 font-bold tracking-wider mb-1">
+                    DECRYPTED SHADOW REFORGES
+                </div>
+                <div id="deck-slots" class="flex space-x-1 overflow-x-auto py-0.5">
+                    <!-- Dynamic collectible slots rendered here -->
+                </div>
+            </div>
+
+            <!-- Active Weapon / Radar Badge -->
+            <div class="hidden sm:flex col-span-1 flex-col items-center justify-center border-l border-cyan-800/40 pl-2">
+                <div class="text-[9px] text-cyan-400 font-bold">AVATAR ENGINE</div>
+                <div class="text-xs text-emerald-300 font-bold dos-font text-center mt-1">ZITT-DOS 50.EXE</div>
+                <div class="text-[9px] text-slate-400">ACTIVE</div>
+            </div>
+        </div>
+
+        <!-- Pause & System Options Modal -->
+        <div id="pause-modal" class="hidden absolute inset-0 bg-slate-950/85 backdrop-blur-md z-30 flex items-center justify-center p-4">
+            <div class="w-full max-w-md bg-slate-900 border-2 border-cyan-400 rounded-lg shadow-2xl p-6 text-cyan-200 flex flex-col space-y-5">
+                <div class="flex justify-between items-center border-b border-cyan-500/40 pb-3">
+                    <h2 class="text-2xl font-bold text-emerald-400 dos-font tracking-wider">SYSTEM CONFIGURATION</h2>
+                    <span class="text-xs text-slate-400">zittdos50.html</span>
+                </div>
+
+                <!-- Settings Controls -->
+                <div class="space-y-4 text-xs sm:text-sm">
+                    <!-- Volume Control -->
+                    <div class="flex flex-col space-y-1">
+                        <div class="flex justify-between">
+                            <label for="slider-volume" class="font-bold">SYNTH SOUND VOLUME</label>
+                            <span id="val-volume" class="text-emerald-400">80%</span>
+                        </div>
+                        <input type="range" id="slider-volume" min="0" max="100" value="80" class="w-full accent-emerald-400 bg-slate-950 cursor-pointer">
+                    </div>
+
+                    <!-- FOV Control -->
+                    <div class="flex flex-col space-y-1">
+                        <div class="flex justify-between">
+                            <label for="slider-fov" class="font-bold">FIELD OF VIEW (FOV)</label>
+                            <span id="val-fov" class="text-emerald-400">60°</span>
+                        </div>
+                        <input type="range" id="slider-fov" min="45" max="90" value="60" class="w-full accent-cyan-400 bg-slate-950 cursor-pointer">
+                    </div>
+
+                    <!-- Render Quality Control -->
+                    <div class="flex flex-col space-y-1">
+                        <div class="flex justify-between">
+                            <label for="select-render-scale" class="font-bold">RAYCASTER RESOLUTION</label>
+                        </div>
+                        <select id="select-render-scale" class="bg-slate-950 border border-cyan-500 rounded p-1 text-cyan-300 focus:outline-none">
+                            <option value="1">Native High-Res (1.0x)</option>
+                            <option value="0.75" selected>DOS Balanced (0.75x Retro)</option>
+                            <option value="0.5">VGA Classic (0.5x Ultra Retro)</option>
+                        </select>
+                    </div>
+
+                    <!-- CRT Effect Toggle -->
+                    <div class="flex justify-between items-center pt-1">
+                        <span class="font-bold">CRT SCANLINES FILTER</span>
+                        <input type="checkbox" id="check-crt" checked class="w-4 h-4 accent-emerald-400 rounded cursor-pointer">
+                    </div>
+                </div>
+
+                <!-- Action Controls -->
+                <div class="flex space-x-3 pt-3 border-t border-cyan-500/40">
+                    <button id="btn-resume" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold py-2 rounded transition border border-emerald-300 text-center text-sm shadow">
+                        RESUME MISSION
+                    </button>
+                    <button id="btn-restart" class="px-4 bg-red-950 hover:bg-red-800 text-red-300 border border-red-500 font-bold py-2 rounded transition text-sm">
+                        RESET
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Start Screen Overlay -->
+        <div id="start-screen" class="absolute inset-0 bg-slate-950 z-40 flex flex-col items-center justify-center p-6 text-center">
+            <div class="max-w-xl border-2 border-emerald-400 bg-slate-900/90 p-6 sm:p-8 rounded-lg shadow-[0_0_30px_rgba(0,255,200,0.3)] flex flex-col items-center space-y-6">
+                <div class="text-4xl sm:text-6xl font-bold text-emerald-400 dos-font tracking-widest drop-shadow">
+                    Z.ITT DOS 3D
+                </div>
+                <div class="text-xs sm:text-sm text-cyan-300 font-mono space-y-2 border-y border-cyan-500/30 py-4 w-full">
+                    <p class="text-yellow-300 font-bold">SYSTEM BOOT SEQUENCE INITIALIZED</p>
+                    <p>Welcome to zittdos50 shadow avatar engine.</p>
+                    <p>Purify and collect all 7 Shadow Orbs across the 3D raycasted labyrinth to restore system integrity.</p>
+                </div>
+                
+                <div class="text-left text-xs text-slate-300 space-y-1 bg-slate-950/80 p-3 rounded border border-cyan-800/60 w-full">
+                    <p class="text-cyan-400 font-bold mb-1">SYSTEM CONTROLS:</p>
+                    <p>• Move: <span class="text-yellow-300">W, A, S, D</span> or <span class="text-yellow-300">Arrow Keys</span></p>
+                    <p>• Interact / Purify: <span class="text-yellow-300">E</span> / <span class="text-yellow-300">Space</span> / <span class="text-yellow-300">Touch Button</span></p>
+                    <p>• Turn / Rotate: <span class="text-yellow-300">Arrow Left & Right</span> / <span class="text-yellow-300">Touch Controls</span></p>
+                </div>
+
+                <button id="btn-start" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-lg rounded shadow-lg transition active:scale-95 border-2 border-emerald-200 dos-font tracking-widest">
+                    INITIALIZE AVATAR SYSTEM [START]
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Engine Script Execution -->
+    <script>
+        /**
+         * Z.ITT DOS 3D Engine & Shadow Avatar Logic
+         */
+
+        const CONFIG = {
+            fov: 60 * (Math.PI / 180),
+            renderScale: 0.75,
+            volume: 0.8,
+            crtEnabled: true,
+            tileSize: 64,
+            texSize: 64,
+            moveSpeed: 3.2,
+            rotSpeed: 2.2
+        };
+
+        // Synthesized Web Audio Sound Manager
+        class RetroAudio {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playPickup() {
+                if (!this.ctx || CONFIG.volume === 0) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+
+                gain.gain.setValueAtTime(0.2 * CONFIG.volume, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.15);
+            }
+
+            playStep() {
+                if (!this.ctx || CONFIG.volume === 0) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(120, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.08);
+
+                gain.gain.setValueAtTime(0.08 * CONFIG.volume, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.08);
+            }
+
+            playWin() {
+                if (!this.ctx || CONFIG.volume === 0) return;
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, idx) => {
+                    const now = this.ctx.currentTime + (idx * 0.1);
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(freq, now);
+
+                    gain.gain.setValueAtTime(0.2 * CONFIG.volume, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start(now);
+                    osc.stop(now + 0.2);
+                });
+            }
+        }
+
+        const audioManager = new RetroAudio();
+
+        // Procedural Texture Generator
+        class TextureManager {
+            constructor() {
+                this.textures = {};
+                this.generateTextures();
+            }
+
+            generateTextures() {
+                const size = CONFIG.texSize;
+
+                // 1. Cyber Grid Wall
+                this.textures[1] = this.createCanvasTexture(size, (ctx) => {
+                    ctx.fillStyle = '#06131e';
+                    ctx.fillRect(0, 0, size, size);
+                    ctx.strokeStyle = '#00ffcc';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(1, 1, size - 2, size - 2);
+                    ctx.strokeStyle = '#006688';
+                    ctx.beginPath();
+                    ctx.moveTo(0, size / 2); ctx.lineTo(size, size / 2);
+                    ctx.moveTo(size / 2, 0); ctx.lineTo(size / 2, size);
+                    ctx.stroke();
+                });
+
+                // 2. DOS Brick Wall
+                this.textures[2] = this.createCanvasTexture(size, (ctx) => {
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(0, 0, size, size);
+                    ctx.strokeStyle = '#334155';
+                    ctx.lineWidth = 2;
+                    const rowH = 16;
+                    for (let y = 0; y < size; y += rowH) {
+                        ctx.beginPath();
+                        ctx.moveTo(0, y); ctx.lineTo(size, y);
+                        ctx.stroke();
+                        const offset = (y / rowH) % 2 === 0 ? 0 : 16;
+                        for (let x = offset; x < size; x += 32) {
+                            ctx.beginPath();
+                            ctx.moveTo(x, y); ctx.lineTo(x, y + rowH);
+                            ctx.stroke();
+                        }
+                    }
+                });
+
+                // 3. Cyber Circuit Wall
+                this.textures[3] = this.createCanvasTexture(size, (ctx) => {
+                    ctx.fillStyle = '#022026';
+                    ctx.fillRect(0, 0, size, size);
+                    ctx.fillStyle = '#10b981';
+                    ctx.fillRect(8, 8, 16, 16);
+                    ctx.fillRect(40, 36, 16, 16);
+                    ctx.strokeStyle = '#34d399';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(16, 24); ctx.lineTo(16, 48); ctx.lineTo(40, 48);
+                    ctx.stroke();
+                });
+            }
+
+            createCanvasTexture(size, drawFn) {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                drawFn(ctx);
+                return ctx.getImageData(0, 0, size, size);
+            }
+        }
+
+        // 16x16 Map Grid
+        const MAP = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+            [1,0,2,2,0,1,0,3,3,3,3,3,0,2,0,1],
+            [1,0,2,0,0,0,0,3,0,0,0,3,0,2,0,1],
+            [1,0,2,0,1,1,0,3,0,2,0,3,0,2,0,1],
+            [1,0,0,0,1,0,0,0,0,2,0,0,0,0,0,1],
+            [1,1,3,0,1,0,1,1,1,2,2,2,1,1,0,1],
+            [1,0,0,0,0,0,0,0,1,0,0,0,0,1,0,1],
+            [1,0,2,2,2,2,0,0,1,0,3,3,0,1,0,1],
+            [1,0,0,0,0,2,0,0,0,0,3,0,0,0,0,1],
+            [1,1,1,0,0,2,2,1,1,0,3,0,1,1,1,1],
+            [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+            [1,0,3,3,3,0,2,0,1,1,1,2,2,0,0,1],
+            [1,0,3,0,0,0,2,0,0,0,0,0,2,0,0,1],
+            [1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        // 7 Collectible Shadow Orbs
+        const SHADOW_ORBS = [
+            { id: 1, color: 'bg-red-600', text: 'Z-1', x: 2.5, y: 1.5, collected: false },
+            { id: 2, color: 'bg-blue-600', text: 'Z-2', x: 13.5, y: 2.5, collected: false },
+            { id: 3, color: 'bg-yellow-500', text: 'Z-3', x: 8.5, y: 5.5, collected: false },
+            { id: 4, color: 'bg-emerald-600', text: 'Z-4', x: 1.5, y: 9.5, collected: false },
+            { id: 5, color: 'bg-purple-600', text: 'Z-5', x: 14.5, y: 9.5, collected: false },
+            { id: 6, color: 'bg-cyan-600', text: 'Z-6', x: 4.5, y: 13.5, collected: false },
+            { id: 7, color: 'bg-amber-500', text: 'Z-7', x: 11.5, y: 13.5, collected: false }
+        ];
+
+        // Animated Z.ITT Avatar HUD Engine
+        class AvatarHUD {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                this.width = this.canvas.width = 64;
+                this.height = this.canvas.height = 64;
+                this.eyeOffset = 0;
+                this.lookTimer = 0;
+            }
+
+            render(time) {
+                const ctx = this.ctx;
+                ctx.fillStyle = '#020617';
+                ctx.fillRect(0, 0, this.width, this.height);
+
+                // Background Matrix Grid
+                ctx.strokeStyle = '#022c22';
+                ctx.lineWidth = 1;
+                for (let i = 0; i < 64; i += 8) {
+                    ctx.beginPath();
+                    ctx.moveTo(i, 0); ctx.lineTo(i, 64);
+                    ctx.moveTo(0, i); ctx.lineTo(64, i);
+                    ctx.stroke();
+                }
+
+                // Random Look Direction
+                if (time > this.lookTimer) {
+                    this.eyeOffset = (Math.random() - 0.5) * 6;
+                    this.lookTimer = time + 1000 + Math.random() * 2000;
+                }
+
+                // Avatar Head Frame
+                ctx.fillStyle = '#0f766e';
+                ctx.fillRect(16, 12, 32, 40);
+
+                // Cyber Visor
+                ctx.fillStyle = '#020617';
+                ctx.fillRect(20, 20, 24, 12);
+
+                // Eyes Grid
+                ctx.fillStyle = '#34d399';
+                const eyeX = 24 + this.eyeOffset;
+                ctx.fillRect(eyeX, 24, 6, 4);
+                ctx.fillRect(eyeX + 10, 24, 6, 4);
+
+                // Animated Mouth Audio Pulse
+                const talkHeight = Math.abs(Math.sin(time / 200)) * 4 + 2;
+                ctx.fillStyle = '#10b981';
+                ctx.fillRect(24, 40, 16, talkHeight);
+
+                // Antenna Node
+                ctx.strokeStyle = '#2dd4bf';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(32, 12); ctx.lineTo(32, 4);
+                ctx.stroke();
+                ctx.fillStyle = '#a7f3d0';
+                ctx.fillRect(30, 2, 4, 4);
+            }
+        }
+
+        // Software Raycasting Engine
+        class GameEngine {
+            constructor() {
+                this.canvas = document.getElementById('viewport');
+                this.ctx = this.canvas.getContext('2d');
+                this.textureMgr = new TextureManager();
+                this.avatarHUD = new AvatarHUD('avatar-canvas');
+
+                this.player = {
+                    x: 2.0,
+                    y: 2.0,
+                    dirX: 1.0,
+                    dirY: 0.0,
+                    planeX: 0.0,
+                    planeY: 0.66,
+                    health: 100
+                };
+
+                this.keys = {};
+                this.touchVector = { x: 0, y: 0 };
+                this.collectedCards = 0;
+                this.isPaused = false;
+                this.isStarted = false;
+
+                this.lastTime = 0;
+                this.fps = 60;
+
+                this.initEvents();
+                this.resizeCanvas();
+            }
+
+            resizeCanvas() {
+                const rect = this.canvas.parentElement.getBoundingClientRect();
+                this.width = Math.floor(rect.width * CONFIG.renderScale);
+                this.height = Math.floor(rect.height * CONFIG.renderScale);
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+                this.imgData = this.ctx.createImageData(this.width, this.height);
+                this.buffer = new Uint32Array(this.imgData.data.buffer);
+            }
+
+            initEvents() {
+                window.addEventListener('resize', () => this.resizeCanvas());
+
+                window.addEventListener('keydown', (e) => {
+                    this.keys[e.key.toLowerCase()] = true;
+                    if (e.key === 'Escape') this.togglePause();
+                    if (e.key === 'e' || e.key === ' ') this.interact();
+                });
+
+                window.addEventListener('keyup', (e) => {
+                    this.keys[e.key.toLowerCase()] = false;
+                });
+
+                // Touch Joystick logic
+                const joyZone = document.getElementById('touch-joystick-zone');
+                const joyStick = document.getElementById('touch-joystick-stick');
+                let joyActive = false;
+                let joyStart = { x: 0, y: 0 };
+
+                const handleTouchMove = (e) => {
+                    if (!joyActive) return;
+                    const touch = e.touches[0];
+                    const dx = touch.clientX - joyStart.x;
+                    const dy = touch.clientY - joyStart.y;
+                    const dist = Math.min(Math.hypot(dx, dy), 40);
+                    const angle = Math.atan2(dy, dx);
+
+                    const stickX = Math.cos(angle) * dist;
+                    const stickY = Math.sin(angle) * dist;
+
+                    joyStick.style.transform = `translate(${stickX}px, ${stickY}px)`;
+                    this.touchVector.x = stickX / 40;
+                    this.touchVector.y = stickY / 40;
+                };
+
+                joyZone.addEventListener('touchstart', (e) => {
+                    joyActive = true;
+                    joyStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                });
+
+                window.addEventListener('touchmove', handleTouchMove);
+                window.addEventListener('touchend', () => {
+                    joyActive = false;
+                    joyStick.style.transform = `translate(0px, 0px)`;
+                    this.touchVector = { x: 0, y: 0 };
+                });
+
+                document.getElementById('btn-touch-action').addEventListener('click', () => this.interact());
+                document.getElementById('btn-touch-turn-left').addEventListener('click', () => this.rotate(-0.15));
+                document.getElementById('btn-touch-turn-right').addEventListener('click', () => this.rotate(0.15));
+            }
+
+            rotate(angle) {
+                const oldDirX = this.player.dirX;
+                this.player.dirX = this.player.dirX * Math.cos(angle) - this.player.dirY * Math.sin(angle);
+                this.player.dirY = oldDirX * Math.sin(angle) + this.player.dirY * Math.cos(angle);
+
+                const oldPlaneX = this.player.planeX;
+                this.player.planeX = this.player.planeX * Math.cos(angle) - this.player.planeY * Math.sin(angle);
+                this.player.planeY = oldPlaneX * Math.sin(angle) + this.player.planeY * Math.cos(angle);
+            }
+
+            updateFOV() {
+                const planeLength = Math.tan(CONFIG.fov / 2);
+                const norm = Math.hypot(this.player.dirX, this.player.dirY);
+                this.player.planeX = -this.player.dirY / norm * planeLength;
+                this.player.planeY = this.player.dirX / norm * planeLength;
+            }
+
+            interact() {
+                audioManager.init();
+                SHADOW_ORBS.forEach((orb) => {
+                    if (!orb.collected) {
+                        const dist = Math.hypot(this.player.x - orb.x, this.player.y - orb.y);
+                        if (dist < 1.2) {
+                            orb.collected = true;
+                            this.collectedCards++;
+                            audioManager.playPickup();
+                            this.updateHUDDeck();
+                            if (this.collectedCards === SHADOW_ORBS.length) {
+                                audioManager.playWin();
+                                alert('SHADOW REALM PURIFIED! ALL Z.ITT ORBS REFORGED!');
+                            }
+                        }
+                    }
+                });
+            }
+
+            updateHUDDeck() {
+                document.getElementById('cards-collected').innerText = this.collectedCards;
+                const container = document.getElementById('deck-slots');
+                container.innerHTML = '';
+                SHADOW_ORBS.forEach((orb) => {
+                    const cardElem = document.createElement('div');
+                    cardElem.className = `w-8 h-10 ${orb.collected ? orb.color : 'bg-slate-800 opacity-40'} text-slate-950 font-bold text-[10px] rounded border border-white/40 flex items-center justify-center shadow-md flex-shrink-0 transition-transform duration-200`;
+                    cardElem.innerText = orb.collected ? orb.text : '?';
+                    container.appendChild(cardElem);
+                });
+            }
+
+            processInput(dt) {
+                if (this.isPaused || !this.isStarted) return;
+
+                const moveStep = CONFIG.moveSpeed * dt;
+                const rotStep = CONFIG.rotSpeed * dt;
+
+                let moveX = 0;
+                let moveY = 0;
+
+                if (this.keys['w'] || this.keys['arrowup']) {
+                    moveX += this.player.dirX * moveStep;
+                    moveY += this.player.dirY * moveStep;
+                }
+                if (this.keys['s'] || this.keys['arrowdown']) {
+                    moveX -= this.player.dirX * moveStep;
+                    moveY -= this.player.dirY * moveStep;
+                }
+                if (this.keys['a']) {
+                    moveX -= this.player.planeX * moveStep;
+                    moveY -= this.player.planeY * moveStep;
+                }
+                if (this.keys['d']) {
+                    moveX += this.player.planeX * moveStep;
+                    moveY += this.player.planeY * moveStep;
+                }
+
+                if (this.keys['arrowleft']) this.rotate(-rotStep);
+                if (this.keys['arrowright']) this.rotate(rotStep);
+
+                if (Math.abs(this.touchVector.y) > 0.1) {
+                    moveX -= this.player.dirX * this.touchVector.y * moveStep;
+                    moveY -= this.player.dirY * this.touchVector.y * moveStep;
+                }
+                if (Math.abs(this.touchVector.x) > 0.1) {
+                    this.rotate(this.touchVector.x * rotStep);
+                }
+
+                if (moveX !== 0 || moveY !== 0) {
+                    const newX = this.player.x + moveX;
+                    const newY = this.player.y + moveY;
+                    if (MAP[Math.floor(this.player.y)][Math.floor(newX)] === 0) this.player.x = newX;
+                    if (MAP[Math.floor(newY)][Math.floor(this.player.x)] === 0) this.player.y = newY;
+                    audioManager.playStep();
+                }
+
+                let nearOrb = false;
+                SHADOW_ORBS.forEach((orb) => {
+                    if (!orb.collected && Math.hypot(this.player.x - orb.x, this.player.y - orb.y) < 1.2) {
+                        nearOrb = true;
+                    }
+                });
+                document.getElementById('interact-prompt').style.opacity = nearOrb ? '1' : '0';
+            }
+
+            renderRaycast() {
+                const w = this.width;
+                const h = this.height;
+                const zBuffer = new Float32Array(w);
+
+                // Render Ceiling & Floor
+                for (let y = 0; y < h; y++) {
+                    const isCeiling = y < h / 2;
+                    const color = isCeiling ? 0xff1a0f02 : 0xff0a0a05;
+                    for (let x = 0; x < w; x++) {
+                        this.buffer[y * w + x] = color;
+                    }
+                }
+
+                // DDA Raycasting Loop
+                for (let x = 0; x < w; x++) {
+                    const cameraX = 2 * x / w - 1;
+                    const rayDirX = this.player.dirX + this.player.planeX * cameraX;
+                    const rayDirY = this.player.dirY + this.player.planeY * cameraX;
+
+                    let mapX = Math.floor(this.player.x);
+                    let mapY = Math.floor(this.player.y);
+
+                    const deltaDistX = Math.abs(1 / rayDirX);
+                    const deltaDistY = Math.abs(1 / rayDirY);
+
+                    let stepX, stepY;
+                    let sideDistX, sideDistY;
+
+                    if (rayDirX < 0) {
+                        stepX = -1;
+                        sideDistX = (this.player.x - mapX) * deltaDistX;
+                    } else {
+                        stepX = 1;
+                        sideDistX = (mapX + 1.0 - this.player.x) * deltaDistX;
+                    }
+
+                    if (rayDirY < 0) {
+                        stepY = -1;
+                        sideDistY = (this.player.y - mapY) * deltaDistY;
+                    } else {
+                        stepY = 1;
+                        sideDistY = (mapY + 1.0 - this.player.y) * deltaDistY;
+                    }
+
+                    let hit = 0;
+                    let side = 0;
+
+                    while (hit === 0) {
+                        if (sideDistX < sideDistY) {
+                            sideDistX += deltaDistX;
+                            mapX += stepX;
+                            side = 0;
+                        } else {
+                            sideDistY += deltaDistY;
+                            mapY += stepY;
+                            side = 1;
+                        }
+                        if (MAP[mapY][mapX] > 0) hit = 1;
+                    }
+
+                    let perpWallDist;
+                    if (side === 0) perpWallDist = (mapX - this.player.x + (1 - stepX) / 2) / rayDirX;
+                    else perpWallDist = (mapY - this.player.y + (1 - stepY) / 2) / rayDirY;
+
+                    zBuffer[x] = perpWallDist;
+
+                    const lineHeight = Math.floor(h / perpWallDist);
+                    let drawStart = -lineHeight / 2 + h / 2;
+                    if (drawStart < 0) drawStart = 0;
+                    let drawEnd = lineHeight / 2 + h / 2;
+                    if (drawEnd >= h) drawEnd = h - 1;
+
+                    const texNum = MAP[mapY][mapX];
+                    const texture = this.textureMgr.textures[texNum] || this.textureMgr.textures[1];
+
+                    let wallX;
+                    if (side === 0) wallX = this.player.y + perpWallDist * rayDirY;
+                    else wallX = this.player.x + perpWallDist * rayDirX;
+                    wallX -= Math.floor(wallX);
+
+                    let texX = Math.floor(wallX * CONFIG.texSize);
+                    if (side === 0 && rayDirX > 0) texX = CONFIG.texSize - texX - 1;
+                    if (side === 1 && rayDirY < 0) texX = CONFIG.texSize - texX - 1;
+
+                    const step = CONFIG.texSize / lineHeight;
+                    let texPos = (drawStart - h / 2 + lineHeight / 2) * step;
+
+                    for (let y = Math.floor(drawStart); y < Math.floor(drawEnd); y++) {
+                        const texY = Math.floor(texPos) & (CONFIG.texSize - 1);
+                        texPos += step;
+
+                        const texIndex = (texY * CONFIG.texSize + texX) * 4;
+                        let r = texture.data[texIndex];
+                        let g = texture.data[texIndex + 1];
+                        let b = texture.data[texIndex + 2];
+
+                        if (side === 1) { r *= 0.7; g *= 0.7; b *= 0.7; }
+                        const fog = Math.min(1, perpWallDist / 12);
+                        r = r * (1 - fog) + 5 * fog;
+                        g = g * (1 - fog) + 8 * fog;
+                        b = b * (1 - fog) + 10 * fog;
+
+                        this.buffer[y * w + x] = (255 << 24) | (Math.floor(b) << 16) | (Math.floor(g) << 8) | Math.floor(r);
+                    }
+                }
+
+                this.ctx.putImageData(this.imgData, 0, 0);
+
+                // Render Sprites
+                SHADOW_ORBS.forEach((orb) => {
+                    if (orb.collected) return;
+
+                    const spriteX = orb.x - this.player.x;
+                    const spriteY = orb.y - this.player.y;
+
+                    const invDet = 1.0 / (this.player.planeX * this.player.dirY - this.player.dirX * this.player.planeY);
+                    const transformX = invDet * (this.player.dirY * spriteX - this.player.dirX * spriteY);
+                    const transformY = invDet * (-this.player.planeY * spriteX + this.player.planeX * spriteY);
+
+                    if (transformY > 0.2) {
+                        const spriteScreenX = Math.floor((w / 2) * (1 + transformX / transformY));
+                        const spriteHeight = Math.abs(Math.floor(h / transformY)) * 0.4;
+                        const spriteWidth = spriteHeight * 0.7;
+
+                        if (spriteScreenX > -spriteWidth && spriteScreenX < w + spriteWidth) {
+                            if (transformY < zBuffer[Math.max(0, Math.min(w - 1, spriteScreenX))]) {
+                                const drawX = spriteScreenX - spriteWidth / 2;
+                                const drawY = h / 2 - spriteHeight / 2;
+
+                                this.ctx.fillStyle = orb.color === 'bg-red-600' ? '#dc2626' : orb.color === 'bg-blue-600' ? '#2563eb' : '#eab308';
+                                this.ctx.fillRect(drawX, drawY, spriteWidth, spriteHeight);
+                                this.ctx.strokeStyle = '#ffffff';
+                                this.ctx.lineWidth = 2;
+                                this.ctx.strokeRect(drawX, drawY, spriteWidth, spriteHeight);
+
+                                this.ctx.fillStyle = '#ffffff';
+                                this.ctx.font = `bold ${Math.max(8, spriteHeight * 0.3)}px sans-serif`;
+                                this.ctx.textAlign = 'center';
+                                this.ctx.fillText(orb.text, spriteScreenX, drawY + spriteHeight * 0.6);
+                            }
+                        }
+                    }
+                });
+            }
+
+            togglePause() {
+                this.isPaused = !this.isPaused;
+                document.getElementById('pause-modal').classList.toggle('hidden', !this.isPaused);
+            }
+
+            start() {
+                this.isStarted = true;
+                document.getElementById('start-screen').classList.add('hidden');
+                this.updateHUDDeck();
+                audioManager.init();
+            }
+
+            loop(time) {
+                const dt = Math.min((time - this.lastTime) / 1000, 0.1);
+                this.fps = Math.round(1 / dt) || 60;
+                document.getElementById('fps-counter').innerText = this.fps;
+
+                this.processInput(dt);
+                this.renderRaycast();
+                this.avatarHUD.render(time);
+
+                this.lastTime = time;
+                requestAnimationFrame((t) => this.loop(t));
+            }
+        }
+
+        let game;
+        window.onload = () => {
+            game = new GameEngine();
+            requestAnimationFrame((t) => game.loop(t));
+
+            document.getElementById('btn-start').addEventListener('click', () => game.start());
+            document.getElementById('btn-pause').addEventListener('click', () => game.togglePause());
+            document.getElementById('btn-resume').addEventListener('click', () => game.togglePause());
+            document.getElementById('btn-restart').addEventListener('click', () => window.location.reload());
+
+            document.getElementById('slider-volume').addEventListener('input', (e) => {
+                CONFIG.volume = e.target.value / 100;
+                document.getElementById('val-volume').innerText = `${e.target.value}%`;
+            });
+
+            document.getElementById('slider-fov').addEventListener('input', (e) => {
+                CONFIG.fov = e.target.value * (Math.PI / 180);
+                document.getElementById('val-fov').innerText = `${e.target.value}°`;
+                game.updateFOV();
+            });
+
+            document.getElementById('select-render-scale').addEventListener('change', (e) => {
+                CONFIG.renderScale = parseFloat(e.target.value);
+                game.resizeCanvas();
+            });
+
+            document.getElementById('check-crt').addEventListener('change', (e) => {
+                const overlay = document.querySelector('.crt-overlay');
+                overlay.style.display = e.target.checked ? 'block' : 'none';
+            });
+        };
+    </script>
+</body>
+</html>
