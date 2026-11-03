@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Z.ITT DOS 5.0 - 3D 1V1 COMBAT & C-PILE ARCADE ENGINE</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #020205;
+            color: #55FFFF;
+            font-family: 'Share Tech Mono', monospace;
+        }
+
+        .dos-font { font-family: 'Press Start 2P', monospace; }
+
+        /* CRT Overlay Effects & C-Pile Pipeline */
+        .crt-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .crt-container::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.4) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            z-index: 20;
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+
+        .crt-container::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: rgba(18, 16, 16, 0.08);
+            opacity: 0;
+            z-index: 20;
+            pointer-events: none;
+            animation: flicker 0.15s infinite;
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.15; }
+            50% { opacity: 0.25; }
+            100% { opacity: 0.18; }
+        }
+
+        /* DOS Palette UI Styling */
+        .dos-bg-blue { background-color: #0000AA; }
+        .dos-bg-darkblue { background-color: #000044; }
+        .dos-text-yellow { color: #FFFF55; }
+        .dos-text-cyan { color: #55FFFF; }
+        .dos-text-green { color: #55FF55; }
+        .dos-text-red { color: #FF5555; }
+
+        .dos-btn {
+            background-color: #0000AA;
+            border: 2px outset #55FFFF;
+            color: #FFFFFF;
+            cursor: pointer;
+            transition: all 0.05s;
+            box-shadow: 2px 2px 0px #000000;
+        }
+        .dos-btn:hover { background-color: #0000D5; }
+        .dos-btn:active, .dos-btn.active {
+            border-style: inset;
+            background-color: #FFFF55;
+            color: #000000;
+        }
+
+        canvas {
+            image-rendering: pixelated;
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Touch Control Buttons */
+        .touch-btn {
+            background: rgba(0, 0, 170, 0.75);
+            border: 2px solid #55FFFF;
+            color: #FFFF55;
+            font-family: 'Press Start 2P', monospace;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            touch-action: none;
+        }
+        .touch-btn:active, .touch-btn.active {
+            background: rgba(255, 255, 85, 0.9);
+            color: #000000;
+            border-color: #FFFFFF;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen overflow-hidden bg-black flex justify-center items-center">
+
+    <div id="app-container" class="crt-container w-full h-full flex flex-col justify-between p-1 sm:p-2">
+        
+        <!-- TOP DOS HEADER -->
+        <div class="dos-bg-blue text-white px-2 py-1.5 flex justify-between items-center text-xs border-b-2 border-cyan-400 z-10 flex-shrink-0">
+            <div class="flex items-center gap-2">
+                <span class="dos-text-yellow dos-font text-[10px] sm:text-xs">Z.ITT DOS 5.0</span>
+                <span class="hidden md:inline dos-text-cyan">| zittdos50_mbot_1vs1.html [c-pile.pipeline]</span>
+            </div>
+            <div class="flex items-center gap-3 text-[10px] sm:text-xs dos-font">
+                <div>ROOM: <span id="hud-room" class="dos-text-yellow">π ÷ 2</span></div>
+                <div>STATE: <span id="hud-state" class="dos-text-green">IDLE</span></div>
+                <div>FPS: <span id="hud-fps" class="dos-text-cyan">60</span></div>
+            </div>
+        </div>
+
+        <!-- MAIN VIEWPORT CONTAINER -->
+        <div class="relative flex-1 w-full bg-black overflow-hidden border-2 border-cyan-800 my-1">
+            <canvas id="viewportCanvas" width="640" height="400"></canvas>
+
+            <!-- LOCKED OPPONENT HUD OVERLAY -->
+            <div id="target-prompt" class="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-950/90 border border-cyan-400 text-yellow-300 px-3 py-1 text-xs rounded dos-font opacity-0 transition-opacity pointer-events-none z-10">
+                1VS1 TARGET: <span id="target-name" class="text-cyan-300">MBOT-CYBER</span> [HP: <span id="target-hp">100%</span>]
+            </div>
+
+            <!-- ON-SCREEN MOBILE TOUCH CONTROLS -->
+            <div id="touch-overlay" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-2 sm:p-4 z-20">
+                <div class="flex justify-between items-center opacity-85 pointer-events-auto">
+                    <button id="btn-touch-reorient" class="dos-btn px-2 py-1 text-[9px] dos-font bg-amber-900">🎯 REORIENT (π=1)</button>
+                    <button id="btn-touch-options" class="dos-btn px-2 py-1 text-[9px] dos-font">⚙️ OPTIONS</button>
+                </div>
+
+                <div class="flex justify-between items-end w-full gap-2 pointer-events-auto">
+                    <!-- Virtual D-Pad & Sidestep Controller -->
+                    <div class="grid grid-cols-3 gap-1 w-32 h-32">
+                        <div></div>
+                        <button id="btn-fwd" class="touch-btn text-xs">▲</button>
+                        <div></div>
+                        <button id="btn-step-l" class="touch-btn text-[9px] text-cyan-300">◄◄</button>
+                        <button id="btn-back" class="touch-btn text-xs">▼</button>
+                        <button id="btn-step-r" class="touch-btn text-[9px] text-cyan-300">►►</button>
+                        <button id="btn-rot-l" class="touch-btn text-xs">↶</button>
+                        <div></div>
+                        <button id="btn-rot-r" class="touch-btn text-xs">↷</button>
+                    </div>
+
+                    <!-- 1v1 Combat & Action Pad -->
+                    <div class="grid grid-cols-2 gap-1.5 w-36 h-32">
+                        <button id="btn-atk-lp" class="touch-btn text-[10px] bg-blue-900/80">LP</button>
+                        <button id="btn-atk-hp" class="touch-btn text-[10px] bg-red-900/80">HP</button>
+                        <button id="btn-atk-lk" class="touch-btn text-[10px] bg-emerald-900/80">LK</button>
+                        <button id="btn-guard" class="touch-btn text-[10px] bg-amber-900/80">GRD</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- START & PAUSE MENU MODAL -->
+            <div id="menu-modal" class="absolute inset-0 bg-black/90 flex flex-col items-center justify-center p-4 sm:p-6 text-center z-30">
+                <h1 class="text-xl sm:text-3xl text-yellow-400 mb-2 dos-font tracking-wider">Z.ITT DOS 5.0</h1>
+                <p class="text-xs text-cyan-300 mb-4 max-w-md">
+                    3D 1v1 Combat & Raycaster Engine [<span class="text-yellow-300">zittdos50_mbot_1vs1.html</span>]<br>
+                    Kernel Pipeline State: <span class="text-emerald-400">room == π ÷ 2 (π=1)</span>
+                </p>
+
+                <!-- LIVE KERNEL CONFIG -->
+                <div class="w-full max-w-md bg-blue-950/80 border-2 border-cyan-400 p-3 rounded mb-4 text-left space-y-2 text-xs">
+                    <div class="text-yellow-400 font-bold dos-font text-[10px] border-b border-cyan-700 pb-1 mb-2">
+                        ⚡ SYSTEM C-PILE KERNEL CONFIG
+                    </div>
+                    
+                    <div class="flex justify-between items-center">
+                        <span>PI PHYSICS CONSTANT:</span>
+                        <button id="cfg-pi-toggle" class="dos-btn px-2 py-1 text-[10px] dos-font bg-cyan-900">π = 1.0 (DOS)</button>
+                    </div>
+
+                    <div class="flex justify-between items-center">
+                        <span>C-PILE POST-PROCESS:</span>
+                        <button id="cfg-c-pile-toggle" class="dos-btn px-2 py-1 text-[10px] dos-font bg-emerald-900">ENABLED</button>
+                    </div>
+
+                    <div class="flex justify-between items-center">
+                        <span>MBOT 1VS1 COMBAT AI:</span>
+                        <button id="cfg-ai-toggle" class="dos-btn px-2 py-1 text-[10px] dos-font bg-green-800">ACTIVE</button>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 justify-center">
+                    <button id="btn-start" class="dos-btn px-6 py-2.5 text-xs font-bold dos-font">EXECUTE 1VS1 ENGINE</button>
+                    <button id="btn-reorient-main" class="dos-btn px-4 py-2.5 text-xs dos-font bg-amber-900">RESET ORIGIN</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM HUD & CONTROL GUIDE -->
+        <div class="dos-bg-blue p-1.5 flex flex-col gap-1 border-t-2 border-cyan-400 text-xs flex-shrink-0">
+            <div class="flex justify-between items-center text-[10px] sm:text-xs px-2 py-0.5 bg-black/60 rounded border border-blue-900">
+                <div>AVATAR HP: <span id="hud-hp" class="dos-text-green">100%</span></div>
+                <div>SPECIAL METER: <span id="hud-meter" class="dos-text-cyan">0%</span></div>
+                <div>COMBO HITS: <span id="hud-combo" class="dos-text-yellow">0</span></div>
+            </div>
+            <div class="flex flex-wrap justify-between items-center text-[9px] sm:text-[10px] text-cyan-200 px-1 gap-1">
+                <span>🎮 Move: WASD / D-Pad | Sidestep: Q,E | Attack: F,G,H | Guard: S | Menu: ESC</span>
+                <button id="btn-reset-pos" class="dos-btn px-2 py-0.5 text-[9px] dos-font bg-amber-900">🎯 RESET POS</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ENGINE LOGIC SCRIPT -->
+    <script>
+        /**
+         * Z.ITT DOS 5.0 - 3D 1V1 COMBAT & C-PILE ENGINE
+         * Native Software Raycaster with room == π ÷ 2 physics and live opponent engagement.
+         */
+
+        class RetroAudio {
+            constructor() { this.ctx = null; }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                }
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+            }
+            playSwoosh() {
+                if (!this.ctx) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(450, t);
+                osc.frequency.exponentialRampToValueAtTime(90, t + 0.12);
+                gain.gain.setValueAtTime(0.25, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.12);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(t);
+                osc.stop(t + 0.12);
+            }
+            playHit() {
+                if (!this.ctx) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(160, t);
+                osc.frequency.exponentialRampToValueAtTime(30, t + 0.18);
+                gain.gain.setValueAtTime(0.35, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.18);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(t);
+                osc.stop(t + 0.18);
+            }
+            playReorient() {
+                if (!this.ctx) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(260, t);
+                osc.frequency.linearRampToValueAtTime(520, t + 0.15);
+                gain.gain.setValueAtTime(0.2, t);
+                gain.gain.linearRampToValueAtTime(0.01, t + 0.15);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(t);
+                osc.stop(t + 0.15);
+            }
+        }
+
+        const audio = new RetroAudio();
+
+        // Procedural Textures
+        const wallTexCanvas = document.createElement('canvas');
+        wallTexCanvas.width = 64;
+        wallTexCanvas.height = 64;
+        const wallTexCtx = wallTexCanvas.getContext('2d');
+
+        function generateTextures() {
+            wallTexCtx.fillStyle = '#0a1128';
+            wallTexCtx.fillRect(0, 0, 64, 64);
+            wallTexCtx.strokeStyle = '#00f0ff';
+            wallTexCtx.lineWidth = 2;
+            wallTexCtx.strokeRect(1, 1, 62, 62);
+            
+            wallTexCtx.strokeStyle = '#005577';
+            wallTexCtx.beginPath();
+            wallTexCtx.moveTo(0, 32); wallTexCtx.lineTo(64, 32);
+            wallTexCtx.moveTo(32, 0); wallTexCtx.lineTo(32, 64);
+            wallTexCtx.stroke();
+
+            wallTexCtx.fillStyle = '#ff0055';
+            wallTexCtx.font = '10px monospace';
+            wallTexCtx.fillText('π=1', 8, 20);
+            wallTexCtx.fillText('Z.ITT', 32, 52);
+        }
+        generateTextures();
+
+        const MAP = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1],
+            [1,0,1,1,0,0,0,0,0,0,0,0,1,1,0,1],
+            [1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+            [1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1],
+            [1,0,1,1,0,0,0,0,0,0,0,0,1,1,0,1],
+            [1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        const canvas = document.getElementById('viewportCanvas');
+        const ctx = canvas.getContext('2d');
+        const W = 640;
+        const H = 400;
+
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = W;
+        offCanvas.height = H;
+        const offCtx = offCanvas.getContext('2d');
+
+        let isPaused = true;
+        let piConstant = 1.0;
+        let cPileEnabled = true;
+        let aiActive = true;
+        let fps = 60;
+        let lastTime = performance.now();
+
+        const player = {
+            x: 8.0, y: 8.0, dirX: 0.0, dirY: -1.0, planeX: 0.66, planeY: 0.0,
+            hp: 100, specialMeter: 0, state: 'IDLE', stateTimer: 0, comboCount: 0, comboResetTimer: 0
+        };
+
+        const targetDummy = { name: 'MBOT-CYBER', x: 8.0, y: 5.0, hp: 100 };
+        const keys = {};
+
+        function reorientOrigin() {
+            player.x = 8.0; player.y = 8.0;
+            player.dirX = 0.0; player.dirY = -1.0;
+            const fovScale = (piConstant === 1.0) ? 0.66 : Math.tan(60 * Math.PI / 360);
+            player.planeX = fovScale; player.planeY = 0.0;
+            player.state = 'IDLE'; player.hp = 100; player.specialMeter = 0; player.comboCount = 0;
+            targetDummy.x = 8.0; targetDummy.y = 5.0; targetDummy.hp = 100;
+            audio.playReorient();
+            updateHUD();
+        }
+
+        function rotatePlayer(angle) {
+            const effectiveAngle = angle * (piConstant === 1.0 ? 1.0 : (Math.PI / 3.14159));
+            const oldDirX = player.dirX;
+            player.dirX = player.dirX * Math.cos(effectiveAngle) - player.dirY * Math.sin(effectiveAngle);
+            player.dirY = oldDirX * Math.sin(effectiveAngle) + player.dirY * Math.cos(effectiveAngle);
+
+            const oldPlaneX = player.planeX;
+            player.planeX = player.planeX * Math.cos(effectiveAngle) - player.planeY * Math.sin(effectiveAngle);
+            player.planeY = oldPlaneX * Math.sin(effectiveAngle) + player.planeY * Math.cos(effectiveAngle);
+        }
+
+        function processInputs(dt) {
+            if (isPaused) return;
+            const moveSpeed = 3.5 * dt;
+            const rotSpeed = 2.2 * dt;
+
+            player.stateTimer += dt;
+            if (player.comboResetTimer > 0) {
+                player.comboResetTimer -= dt;
+                if (player.comboResetTimer <= 0) { player.comboCount = 0; updateHUD(); }
+            }
+
+            if (player.state.startsWith('ATTACK')) {
+                if (player.stateTimer > 0.3) { player.state = 'IDLE'; updateHUD(); }
+                return;
+            }
+
+            let moved = false;
+            if (keys['KeyW']) {
+                const nx = player.x + player.dirX * moveSpeed;
+                const ny = player.y + player.dirY * moveSpeed;
+                if (MAP[Math.floor(ny)][Math.floor(nx)] === 0) { player.x = nx; player.y = ny; }
+                player.state = 'WALK_FWD'; moved = true;
+            } else if (keys['KeyS']) {
+                const nx = player.x - player.dirX * moveSpeed;
+                const ny = player.y - player.dirY * moveSpeed;
+                if (MAP[Math.floor(ny)][Math.floor(nx)] === 0) { player.x = nx; player.y = ny; }
+                player.state = 'GUARD'; moved = true;
+            }
+
+            if (keys['KeyQ']) {
+                const nx = player.x - player.planeX * moveSpeed * 1.2;
+                const ny = player.y - player.planeY * moveSpeed * 1.2;
+                if (MAP[Math.floor(ny)][Math.floor(nx)] === 0) { player.x = nx; player.y = ny; }
+                player.state = 'STEP_L'; moved = true;
+            } else if (keys['KeyE']) {
+                const nx = player.x + player.planeX * moveSpeed * 1.2;
+                const ny = player.y + player.planeY * moveSpeed * 1.2;
+                if (MAP[Math.floor(ny)][Math.floor(nx)] === 0) { player.x = nx; player.y = ny; }
+                player.state = 'STEP_R'; moved = true;
+            }
+
+            if (keys['KeyA'] || keys['ArrowLeft']) rotatePlayer(-rotSpeed);
+            if (keys['KeyD'] || keys['ArrowRight']) rotatePlayer(rotSpeed);
+
+            if (!moved && player.state !== 'IDLE') { player.state = 'IDLE'; updateHUD(); }
+        }
+
+        function executeAttack(type) {
+            if (isPaused || player.state.startsWith('ATTACK')) return;
+            audio.playSwoosh();
+            player.state = `ATTACK_${type}`;
+            player.stateTimer = 0;
+
+            const dist = Math.hypot(player.x - targetDummy.x, player.y - targetDummy.y);
+            if (dist < 1.8) {
+                targetDummy.hp = Math.max(0, targetDummy.hp - (type === 'HP' ? 20 : 10));
+                player.specialMeter = Math.min(100, player.specialMeter + 15);
+                player.comboCount++;
+                player.comboResetTimer = 2.0;
+                audio.playHit();
+                updateHUD();
+
+                if (targetDummy.hp <= 0) {
+                    setTimeout(() => { targetDummy.hp = 100; updateHUD(); }, 1500);
+                }
+            }
+        }
+
+        function updateAI(dt) {
+            if (!aiActive || isPaused) return;
+            const dist = Math.hypot(player.x - targetDummy.x, player.y - targetDummy.y);
+            if (dist > 1.2) {
+                targetDummy.x += (player.x - targetDummy.x) * 0.4 * dt;
+                targetDummy.y += (player.y - targetDummy.y) * 0.4 * dt;
+            }
+            if (dist < 1.5 && Math.random() < 0.03) {
+                player.hp = Math.max(0, player.hp - 5);
+                audio.playHit();
+                updateHUD();
+                if (player.hp <= 0) {
+                    setTimeout(() => { player.hp = 100; reorientOrigin(); }, 1500);
+                }
+            }
+        }
+
+        function renderRaycaster() {
+            for (let y = 0; y < H; y++) {
+                offCtx.fillStyle = (y < H / 2) ? '#02020a' : '#0a0d18';
+                offCtx.fillRect(0, y, W, 1);
+            }
+
+            const zBuffer = new Float32Array(W);
+            for (let x = 0; x < W; x++) {
+                const cameraX = 2 * x / W - 1;
+                const rayDirX = player.dirX + player.planeX * cameraX;
+                const rayDirY = player.dirY + player.planeY * cameraX;
+
+                let mapX = Math.floor(player.x);
+                let mapY = Math.floor(player.y);
+                const deltaDistX = Math.abs(1 / rayDirX);
+                const deltaDistY = Math.abs(1 / rayDirY);
+
+                let stepX, stepY, sideDistX, sideDistY;
+                if (rayDirX < 0) { stepX = -1; sideDistX = (player.x - mapX) * deltaDistX; }
+                else { stepX = 1; sideDistX = (mapX + 1.0 - player.x) * deltaDistX; }
+                if (rayDirY < 0) { stepY = -1; sideDistY = (player.y - mapY) * deltaDistY; }
+                else { stepY = 1; sideDistY = (mapY + 1.0 - player.y) * deltaDistY; }
+
+                let hit = 0, side = 0;
+                while (hit === 0) {
+                    if (sideDistX < sideDistY) { sideDistX += deltaDistX; mapX += stepX; side = 0; }
+                    else { sideDistY += deltaDistY; mapY += stepY; side = 1; }
+                    if (MAP[mapY][mapX] > 0) hit = 1;
+                }
+
+                const perpWallDist = (side === 0) ? (mapX - player.x + (1 - stepX) / 2) / rayDirX : (mapY - player.y + (1 - stepY) / 2) / rayDirY;
+                zBuffer[x] = perpWallDist;
+
+                const lineHeight = Math.floor(H / perpWallDist);
+                const drawStart = Math.max(0, -lineHeight / 2 + H / 2);
+                const drawEnd = Math.min(H - 1, lineHeight / 2 + H / 2);
+
+                offCtx.fillStyle = (side === 1) ? '#003355' : '#006699';
+                offCtx.fillRect(x, drawStart, 1, drawEnd - drawStart);
+
+                if (x % 32 === 0) {
+                    offCtx.fillStyle = '#00ffff';
+                    offCtx.fillRect(x, drawStart, 1, drawEnd - drawStart);
+                }
+            }
+
+            // 1v1 Opponent Sprite Rendering
+            const spriteX = targetDummy.x - player.x;
+            const spriteY = targetDummy.y - player.y;
+            const invDet = 1.0 / (player.planeX * player.dirY - player.dirX * player.planeY);
+            const transformX = invDet * (player.dirY * spriteX - player.dirX * spriteY);
+            const transformY = invDet * (-player.planeY * spriteX + player.planeX * spriteY);
+
+            if (transformY > 0.3) {
+                const spriteScreenX = Math.floor((W / 2) * (1 + transformX / transformY));
+                const spriteHeight = Math.abs(Math.floor(H / transformY)) * 0.8;
+                const spriteWidth = spriteHeight * 0.6;
+                const drawX = Math.floor(spriteScreenX - spriteWidth / 2);
+                const drawY = Math.floor(H / 2 - spriteHeight / 2);
+
+                if (spriteScreenX > 0 && spriteScreenX < W && transformY < zBuffer[Math.max(0, Math.min(W - 1, spriteScreenX))]) {
+                    offCtx.fillStyle = targetDummy.hp > 0 ? '#ff0055' : '#555555';
+                    offCtx.fillRect(drawX, drawY, spriteWidth, spriteHeight);
+                    offCtx.strokeStyle = '#55ffff';
+                    offCtx.lineWidth = 2;
+                    offCtx.strokeRect(drawX, drawY, spriteWidth, spriteHeight);
+
+                    offCtx.fillStyle = '#ff0000';
+                    offCtx.fillRect(drawX, drawY - 12, spriteWidth, 6);
+                    offCtx.fillStyle = '#00ff55';
+                    offCtx.fillRect(drawX, drawY - 12, spriteWidth * (targetDummy.hp / 100), 6);
+                    document.getElementById('target-name').innerText = targetDummy.name;
+                    document.getElementById('target-hp').innerText = `${targetDummy.hp}%`;
+                    document.getElementById('target-prompt').style.opacity = '1';
+                } else {
+                    document.getElementById('target-prompt').style.opacity = '0';
+                }
+            } else {
+                document.getElementById('target-prompt').style.opacity = '0';
+            }
+
+            // Weapon / Fist Overlay
+            const bobOffset = Math.sin(performance.now() * 0.008) * 6;
+            const weaponX = W / 2 + (player.state === 'STEP_L' ? -30 : player.state === 'STEP_R' ? 30 : 0);
+            const weaponY = H - 80 + (player.state.startsWith('ATTACK') ? -20 : 0) + bobOffset;
+            offCtx.fillStyle = '#0000aa';
+            offCtx.fillRect(weaponX - 30, weaponY, 60, 100);
+            offCtx.strokeStyle = '#55ffff';
+            offCtx.lineWidth = 3;
+            offCtx.strokeRect(weaponX - 30, weaponY, 60, 100);
+        }
+
+        function renderCPilePostProcess() {
+            ctx.clearRect(0, 0, W, H);
+            ctx.drawImage(offCanvas, 0, 0, W, H);
+            if (cPileEnabled) {
+                ctx.globalCompositeOperation = 'screen';
+                ctx.drawImage(offCanvas, -1, 0, W, H);
+                ctx.drawImage(offCanvas, 1, 0, W, H);
+                ctx.globalCompositeOperation = 'source-over';
+            }
+        }
+
+        function updateHUD() {
+            document.getElementById('hud-room').innerText = (piConstant === 1.0) ? 'π ÷ 2' : '3.14';
+            document.getElementById('hud-state').innerText = player.state;
+            document.getElementById('hud-hp').innerText = `${player.hp}%`;
+            document.getElementById('hud-meter').innerText = `${player.specialMeter}%`;
+            document.getElementById('hud-combo').innerText = player.comboCount;
+        }
+
+        function gameLoop(now) {
+            const dt = Math.min((now - lastTime) / 1000, 0.1);
+            lastTime = now;
+            fps = Math.round(1 / dt) || 60;
+            document.getElementById('hud-fps').innerText = fps;
+
+            processInputs(dt);
+            updateAI(dt);
+            renderRaycaster();
+            renderCPilePostProcess();
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            audio.init();
+            if (e.code === 'KeyF') executeAttack('LP');
+            if (e.code === 'KeyH') executeAttack('HP');
+            if (e.code === 'KeyG') executeAttack('LK');
+            if (e.code === 'Escape') {
+                isPaused = !isPaused;
+                document.getElementById('menu-modal').classList.toggle('hidden', !isPaused);
+            }
+        });
+
+        window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+        function setupTouchControls() {
+            const bindBtn = (id, code) => {
+                const btn = document.getElementById(id);
+                if (!btn) return;
+                btn.addEventListener('touchstart', (e) => { e.preventDefault(); audio.init(); keys[code] = true; btn.classList.add('active'); }, {passive: false});
+                btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[code] = false; btn.classList.remove('active'); }, {passive: false});
+            };
+
+            bindBtn('btn-fwd', 'KeyW');
+            bindBtn('btn-back', 'KeyS');
+            bindBtn('btn-step-l', 'KeyQ');
+            bindBtn('btn-step-r', 'KeyE');
+            bindBtn('btn-rot-l', 'KeyA');
+            bindBtn('btn-rot-r', 'KeyD');
+
+            document.getElementById('btn-atk-lp').addEventListener('touchstart', (e) => { e.preventDefault(); executeAttack('LP'); }, {passive: false});
+            document.getElementById('btn-atk-hp').addEventListener('touchstart', (e) => { e.preventDefault(); executeAttack('HP'); }, {passive: false});
+            document.getElementById('btn-atk-lk').addEventListener('touchstart', (e) => { e.preventDefault(); executeAttack('LK'); }, {passive: false});
+            document.getElementById('btn-guard').addEventListener('touchstart', (e) => { e.preventDefault(); keys['KeyS'] = true; }, {passive: false});
+            document.getElementById('btn-guard').addEventListener('touchend', (e) => { e.preventDefault(); keys['KeyS'] = false; }, {passive: false});
+        }
+
+        document.getElementById('btn-start').addEventListener('click', () => {
+            audio.init();
+            isPaused = false;
+            document.getElementById('menu-modal').classList.add('hidden');
+        });
+
+        document.getElementById('btn-reset-pos').addEventListener('click', reorientOrigin);
+        document.getElementById('btn-touch-reorient').addEventListener('click', reorientOrigin);
+        document.getElementById('btn-reorient-main').addEventListener('click', reorientOrigin);
+        document.getElementById('btn-touch-options').addEventListener('click', () => {
+            isPaused = true;
+            document.getElementById('menu-modal').classList.remove('hidden');
+        });
+
+        document.getElementById('cfg-pi-toggle').addEventListener('click', () => {
+            piConstant = (piConstant === 1.0) ? 3.14159 : 1.0;
+            document.getElementById('cfg-pi-toggle').innerText = (piConstant === 1.0) ? 'π = 1.0 (DOS)' : 'π = 3.14 (STANDARD)';
+            reorientOrigin();
+        });
+
+        document.getElementById('cfg-c-pile-toggle').addEventListener('click', () => {
+            cPileEnabled = !cPileEnabled;
+            document.getElementById('cfg-c-pile-toggle').innerText = cPileEnabled ? 'ENABLED' : 'DISABLED';
+        });
+
+        document.getElementById('cfg-ai-toggle').addEventListener('click', () => {
+            aiActive = !aiActive;
+            const btn = document.getElementById('cfg-ai-toggle');
+            btn.innerText = aiActive ? 'ACTIVE' : 'OFF';
+            btn.className = aiActive ? 'dos-btn px-2 py-1 text-[10px] dos-font bg-green-800' : 'dos-btn px-2 py-1 text-[10px] dos-font bg-red-900';
+        });
+
+        window.onload = () => {
+            setupTouchControls();
+            reorientOrigin();
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
