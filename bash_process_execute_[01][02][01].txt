@@ -9,7 +9,7 @@ print
 ##
 ##
 # c o d e
-CPU --> hdd --> rom --> CPU /// GPU --> ram and  /// or hdd ; back to -full mainboard ; etc.
+CPU --> hdd --> rom --> CPU /// GPU --> ram and  ///  or hdd ; back to -full mainboard ; etc.
 #
 b a s h -- c o d e
 .debb
