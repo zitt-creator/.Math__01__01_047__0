@@ -1,5 +1,5 @@
 /.
-updated.last::00120011000260./.sulu
+updated.last::00240011000260./.sulu
 ;;;;;
 #
 ::
@@ -44,7 +44,7 @@ https://share.gemini.google/jmy007FbPhca
 ##
 ##
 # n o t e
-# heisenbergsche unschärferelation  ----  google gemini required..  . ./.
+# heisenbergsche unschärferelation----++ ----  google gemini required to show ascii--code correct..  . ./.
 https://gemini.google.com/share/c001908e9588?social_preview=false&skid=ac1972b4-6877-4ad9-88ae-ec212345c279
 ##
 ##
